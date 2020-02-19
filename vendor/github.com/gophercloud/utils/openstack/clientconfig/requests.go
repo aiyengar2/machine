@@ -2,6 +2,7 @@ package clientconfig
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -60,6 +61,10 @@ type ClientOpts struct {
 	// EndpointType specifies whether to use the public, internal, or
 	// admin endpoint of a service.
 	EndpointType string
+
+	// HTTPClient provides the ability customize the ProviderClient's
+	// internal HTTP client.
+	HTTPClient *http.Client
 
 	// YAMLOpts provides the ability to pass a customized set
 	// of options and methods for loading the YAML file.
@@ -735,6 +740,11 @@ func NewServiceClient(service string, opts *ClientOpts) (*gophercloud.ServiceCli
 		return nil, err
 	}
 
+	// If an HTTPClient was specified, use it.
+	if opts.HTTPClient != nil {
+		pClient.HTTPClient = *opts.HTTPClient
+	}
+
 	// Determine the region to use.
 	// First, check if the REGION_NAME environment variable is set.
 	var region string
@@ -783,6 +793,8 @@ func NewServiceClient(service string, opts *ClientOpts) (*gophercloud.ServiceCli
 		return openstack.NewComputeV2(pClient, eo)
 	case "container":
 		return openstack.NewContainerV1(pClient, eo)
+	case "container-infra":
+		return openstack.NewContainerInfraV1(pClient, eo)
 	case "database":
 		return openstack.NewDBV1(pClient, eo)
 	case "dns":

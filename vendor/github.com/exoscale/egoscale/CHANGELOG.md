@@ -1,6 +1,18 @@
 Changelog
 =========
 
+0.12.5
+------
+
+- feat: `VirtualMachine` is listable by Tag
+- fix: `AuthorizeSecurityGroupEgress` could return `authorizeSecurityGroupIngress` as name
+- fix: `IngressRule`/`EgressRule` remove non-existent fields
+
+0.12.4
+------
+
+- feat: `Snapshot` is `Listable`
+
 0.12.3
 ------
 

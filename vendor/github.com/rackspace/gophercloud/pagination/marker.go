@@ -32,9 +32,3 @@ func (current MarkerPageBase) NextPageURL() (string, error) {
 
 	return currentURL.String(), nil
 }
-
-// GetBody returns the linked page's body. This method is needed to satisfy the
-// Page interface.
-func (current MarkerPageBase) GetBody() interface{} {
-	return current.Body
-}

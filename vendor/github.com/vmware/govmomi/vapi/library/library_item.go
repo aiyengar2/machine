@@ -25,6 +25,12 @@ import (
 	"github.com/vmware/govmomi/vapi/internal"
 )
 
+const (
+	ItemTypeISO  = "iso"
+	ItemTypeOVF  = "ovf"
+	ItemTypeVMTX = "vm-template"
+)
+
 // Item provides methods to create, read, update, delete, and enumerate library items.
 type Item struct {
 	Cached           bool       `json:"cached,omitempty"`
@@ -77,27 +83,46 @@ func (c *Manager) CreateLibraryItem(ctx context.Context, item Item) (string, err
 			Type:        item.Type,
 		},
 	}
-	url := internal.URL(c, internal.LibraryItemPath)
+	url := c.Resource(internal.LibraryItemPath)
 	var res string
 	return res, c.Do(ctx, url.Request(http.MethodPost, spec), &res)
 }
 
+// CopyLibraryItem copies a library item
+func (c *Manager) CopyLibraryItem(ctx context.Context, src *Item, dst Item) (string, error) {
+	body := struct {
+		Item `json:"destination_create_spec"`
+	}{dst}
+	url := c.Resource(internal.LibraryItemPath).WithID(src.ID).WithAction("copy")
+	var res string
+	return res, c.Do(ctx, url.Request(http.MethodPost, body), &res)
+}
+
+// SyncLibraryItem syncs a subscribed library item
+func (c *Manager) SyncLibraryItem(ctx context.Context, item *Item, force bool) error {
+	body := struct {
+		Force bool `json:"force_sync_content"`
+	}{force}
+	url := c.Resource(internal.SubscribedLibraryItem).WithID(item.ID).WithAction("sync")
+	return c.Do(ctx, url.Request(http.MethodPost, body), nil)
+}
+
 // DeleteLibraryItem deletes an existing library item.
 func (c *Manager) DeleteLibraryItem(ctx context.Context, item *Item) error {
-	url := internal.URL(c, internal.LibraryItemPath).WithID(item.ID)
+	url := c.Resource(internal.LibraryItemPath).WithID(item.ID)
 	return c.Do(ctx, url.Request(http.MethodDelete), nil)
 }
 
 // ListLibraryItems returns a list of all items in a content library.
 func (c *Manager) ListLibraryItems(ctx context.Context, id string) ([]string, error) {
-	url := internal.URL(c, internal.LibraryItemPath).WithParameter("library_id", id)
+	url := c.Resource(internal.LibraryItemPath).WithParam("library_id", id)
 	var res []string
 	return res, c.Do(ctx, url.Request(http.MethodGet), &res)
 }
 
 // GetLibraryItem returns information on a library item for the given ID.
 func (c *Manager) GetLibraryItem(ctx context.Context, id string) (*Item, error) {
-	url := internal.URL(c, internal.LibraryItemPath).WithID(id)
+	url := c.Resource(internal.LibraryItemPath).WithID(id)
 	var res Item
 	return &res, c.Do(ctx, url.Request(http.MethodGet), &res)
 }
@@ -133,7 +158,7 @@ type FindItem struct {
 func (c *Manager) FindLibraryItems(
 	ctx context.Context, search FindItem) ([]string, error) {
 
-	url := internal.URL(c, internal.LibraryItemPath).WithAction("find")
+	url := c.Resource(internal.LibraryItemPath).WithAction("find")
 	spec := struct {
 		Spec FindItem `json:"spec"`
 	}{search}

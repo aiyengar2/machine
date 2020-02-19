@@ -5,10 +5,11 @@ import (
 
 	"github.com/rancher/machine/libmachine/log"
 
-	"github.com/Azure/azure-sdk-for-go/arm/compute"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
 	"github.com/Azure/go-autorest/autorest/to"
 )
 
+// VMPowerState indicates the power state of the VM or is Unknown
 type VMPowerState string
 
 const (

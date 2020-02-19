@@ -1,8 +1,7 @@
 package tokens
 
 import (
-	"net/http"
-
+	"github.com/racker/perigee"
 	"github.com/rackspace/gophercloud"
 )
 
@@ -234,33 +233,38 @@ func Create(c *gophercloud.ServiceClient, options gophercloud.AuthOptions, scope
 	}
 
 	var result CreateResult
-	var response *http.Response
-	response, result.Err = c.Post(tokenURL(c), req, &result.Body, nil)
+	var response *perigee.Response
+	response, result.Err = perigee.Request("POST", tokenURL(c), perigee.Options{
+		ReqBody: &req,
+		Results: &result.Body,
+		OkCodes: []int{201},
+	})
 	if result.Err != nil {
 		return result
 	}
-	result.Header = response.Header
+	result.Header = response.HttpResponse.Header
 	return result
 }
 
 // Get validates and retrieves information about another token.
 func Get(c *gophercloud.ServiceClient, token string) GetResult {
 	var result GetResult
-	var response *http.Response
-	response, result.Err = c.Get(tokenURL(c), &result.Body, &gophercloud.RequestOpts{
+	var response *perigee.Response
+	response, result.Err = perigee.Request("GET", tokenURL(c), perigee.Options{
 		MoreHeaders: subjectTokenHeaders(c, token),
+		Results:     &result.Body,
 		OkCodes:     []int{200, 203},
 	})
 	if result.Err != nil {
 		return result
 	}
-	result.Header = response.Header
+	result.Header = response.HttpResponse.Header
 	return result
 }
 
 // Validate determines if a specified token is valid or not.
 func Validate(c *gophercloud.ServiceClient, token string) (bool, error) {
-	response, err := c.Request("HEAD", tokenURL(c), gophercloud.RequestOpts{
+	response, err := perigee.Request("HEAD", tokenURL(c), perigee.Options{
 		MoreHeaders: subjectTokenHeaders(c, token),
 		OkCodes:     []int{204, 404},
 	})
@@ -274,8 +278,9 @@ func Validate(c *gophercloud.ServiceClient, token string) (bool, error) {
 // Revoke immediately makes specified token invalid.
 func Revoke(c *gophercloud.ServiceClient, token string) RevokeResult {
 	var res RevokeResult
-	_, res.Err = c.Delete(tokenURL(c), &gophercloud.RequestOpts{
+	_, res.Err = perigee.Request("DELETE", tokenURL(c), perigee.Options{
 		MoreHeaders: subjectTokenHeaders(c, token),
+		OkCodes:     []int{204},
 	})
 	return res
 }

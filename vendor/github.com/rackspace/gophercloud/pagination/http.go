@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/racker/perigee"
 	"github.com/rackspace/gophercloud"
 )
 
@@ -18,7 +19,7 @@ type PageResult struct {
 
 // PageResultFrom parses an HTTP response as JSON and returns a PageResult containing the
 // results, interpreting it as JSON if the content type indicates.
-func PageResultFrom(resp *http.Response) (PageResult, error) {
+func PageResultFrom(resp http.Response) (PageResult, error) {
 	var parsedBody interface{}
 
 	defer resp.Body.Close()
@@ -45,10 +46,19 @@ func PageResultFrom(resp *http.Response) (PageResult, error) {
 	}, err
 }
 
-// Request performs an HTTP request and extracts the http.Response from the result.
-func Request(client *gophercloud.ServiceClient, headers map[string]string, url string) (*http.Response, error) {
-	return client.Request("GET", url, gophercloud.RequestOpts{
-		MoreHeaders: headers,
+// Request performs a Perigee request and extracts the http.Response from the result.
+func Request(client *gophercloud.ServiceClient, headers map[string]string, url string) (http.Response, error) {
+	h := client.AuthenticatedHeaders()
+	for key, value := range headers {
+		h[key] = value
+	}
+
+	resp, err := perigee.Request("GET", url, perigee.Options{
+		MoreHeaders: h,
 		OkCodes:     []int{200, 204},
 	})
+	if err != nil {
+		return http.Response{}, err
+	}
+	return resp.HttpResponse, nil
 }

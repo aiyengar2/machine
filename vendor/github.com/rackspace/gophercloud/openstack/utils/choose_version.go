@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rackspace/gophercloud"
+	"github.com/racker/perigee"
 )
 
 // Version is a supported API version, corresponding to a vN package within the appropriate service.
@@ -23,7 +23,7 @@ var goodStatus = map[string]bool{
 // ChooseVersion queries the base endpoint of an API to choose the most recent non-experimental alternative from a service's
 // published versions.
 // It returns the highest-Priority Version among the alternatives that are provided, as well as its corresponding endpoint.
-func ChooseVersion(client *gophercloud.ProviderClient, recognized []*Version) (*Version, string, error) {
+func ChooseVersion(identityBase string, identityEndpoint string, recognized []*Version) (*Version, string, error) {
 	type linkResp struct {
 		Href string `json:"href"`
 		Rel  string `json:"rel"`
@@ -49,7 +49,7 @@ func ChooseVersion(client *gophercloud.ProviderClient, recognized []*Version) (*
 		}
 		return endpoint
 	}
-	identityEndpoint := normalize(client.IdentityEndpoint)
+	identityEndpoint = normalize(identityEndpoint)
 
 	// If a full endpoint is specified, check version suffixes for a match first.
 	for _, v := range recognized {
@@ -59,9 +59,9 @@ func ChooseVersion(client *gophercloud.ProviderClient, recognized []*Version) (*
 	}
 
 	var resp response
-	_, err := client.Request("GET", client.IdentityBase, gophercloud.RequestOpts{
-		JSONResponse: &resp,
-		OkCodes:      []int{200, 300},
+	_, err := perigee.Request("GET", identityBase, perigee.Options{
+		Results: &resp,
+		OkCodes: []int{200, 300},
 	})
 
 	if err != nil {
@@ -88,7 +88,7 @@ func ChooseVersion(client *gophercloud.ProviderClient, recognized []*Version) (*
 			// Prefer a version that exactly matches the provided endpoint.
 			if href == identityEndpoint {
 				if href == "" {
-					return nil, "", fmt.Errorf("Endpoint missing in version %s response from %s", value.ID, client.IdentityBase)
+					return nil, "", fmt.Errorf("Endpoint missing in version %s response from %s", value.ID, identityBase)
 				}
 				return matching, href, nil
 			}
@@ -104,10 +104,10 @@ func ChooseVersion(client *gophercloud.ProviderClient, recognized []*Version) (*
 	}
 
 	if highest == nil {
-		return nil, "", fmt.Errorf("No supported version available from endpoint %s", client.IdentityBase)
+		return nil, "", fmt.Errorf("No supported version available from endpoint %s", identityBase)
 	}
 	if endpoint == "" {
-		return nil, "", fmt.Errorf("Endpoint missing in version %s response from %s", highest.ID, client.IdentityBase)
+		return nil, "", fmt.Errorf("Endpoint missing in version %s response from %s", highest.ID, identityBase)
 	}
 
 	return highest, endpoint, nil

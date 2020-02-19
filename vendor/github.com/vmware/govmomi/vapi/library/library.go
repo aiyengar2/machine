@@ -20,8 +20,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/internal"
 	"github.com/vmware/govmomi/vapi/rest"
 )
@@ -38,10 +40,23 @@ type Library struct {
 	Description      string            `json:"description,omitempty"`
 	ID               string            `json:"id,omitempty"`
 	LastModifiedTime *time.Time        `json:"last_modified_time,omitempty"`
+	LastSyncTime     *time.Time        `json:"last_sync_time,omitempty"`
 	Name             string            `json:"name,omitempty"`
 	Storage          []StorageBackings `json:"storage_backings,omitempty"`
 	Type             string            `json:"type,omitempty"`
 	Version          string            `json:"version,omitempty"`
+	Subscription     *Subscription     `json:"subscription_info,omitempty"`
+}
+
+// Subscription info
+type Subscription struct {
+	AuthenticationMethod string `json:"authentication_method"`
+	AutomaticSyncEnabled *bool  `json:"automatic_sync_enabled,omitempty"`
+	OnDemand             *bool  `json:"on_demand,omitempty"`
+	Password             string `json:"password,omitempty"`
+	SslThumbprint        string `json:"ssl_thumbprint,omitempty"`
+	SubscriptionURL      string `json:"subscription_url,omitempty"`
+	UserName             string `json:"user_name,omitempty"`
 }
 
 // Patch merges updates from the given src.
@@ -84,7 +99,7 @@ type Find struct {
 // to search for all libraries, all libraries with a specific name, regardless
 // of type, or all libraries of a specified type.
 func (c *Manager) FindLibrary(ctx context.Context, search Find) ([]string, error) {
-	url := internal.URL(c, internal.LibraryPath).WithAction("find")
+	url := c.Resource(internal.LibraryPath).WithAction("find")
 	spec := struct {
 		Spec Find `json:"spec"`
 	}{search}
@@ -95,33 +110,62 @@ func (c *Manager) FindLibrary(ctx context.Context, search Find) ([]string, error
 // CreateLibrary creates a new library with the given Type, Name,
 // Description, and CategoryID.
 func (c *Manager) CreateLibrary(ctx context.Context, library Library) (string, error) {
-	if library.Type != "LOCAL" {
-		return "", fmt.Errorf("unsupported library type: %q", library.Type)
-	}
 	spec := struct {
 		Library Library `json:"create_spec"`
 	}{library}
-	url := internal.URL(c, internal.LocalLibraryPath)
+	path := internal.LocalLibraryPath
+	if library.Type == "SUBSCRIBED" {
+		path = internal.SubscribedLibraryPath
+		sub := library.Subscription
+		u, err := url.Parse(sub.SubscriptionURL)
+		if err != nil {
+			return "", err
+		}
+		if u.Scheme == "https" && sub.SslThumbprint == "" {
+			thumbprint := c.Thumbprint(u.Host)
+			if thumbprint == "" {
+				t := c.DefaultTransport()
+				if t.TLSClientConfig.InsecureSkipVerify {
+					var info object.HostCertificateInfo
+					_ = info.FromURL(u, t.TLSClientConfig)
+					thumbprint = info.ThumbprintSHA1
+				}
+				sub.SslThumbprint = thumbprint
+			}
+		}
+	}
+	url := c.Resource(path)
 	var res string
 	return res, c.Do(ctx, url.Request(http.MethodPost, spec), &res)
 }
 
+// SyncLibrary syncs a subscribed library.
+func (c *Manager) SyncLibrary(ctx context.Context, library *Library) error {
+	path := internal.SubscribedLibraryPath
+	url := c.Resource(path).WithID(library.ID).WithAction("sync")
+	return c.Do(ctx, url.Request(http.MethodPost), nil)
+}
+
 // DeleteLibrary deletes an existing library.
 func (c *Manager) DeleteLibrary(ctx context.Context, library *Library) error {
-	url := internal.URL(c, internal.LocalLibraryPath).WithID(library.ID)
+	path := internal.LocalLibraryPath
+	if library.Type == "SUBSCRIBED" {
+		path = internal.SubscribedLibraryPath
+	}
+	url := c.Resource(path).WithID(library.ID)
 	return c.Do(ctx, url.Request(http.MethodDelete), nil)
 }
 
 // ListLibraries returns a list of all content library IDs in the system.
 func (c *Manager) ListLibraries(ctx context.Context) ([]string, error) {
-	url := internal.URL(c, internal.LibraryPath)
+	url := c.Resource(internal.LibraryPath)
 	var res []string
 	return res, c.Do(ctx, url.Request(http.MethodGet), &res)
 }
 
 // GetLibraryByID returns information on a library for the given ID.
 func (c *Manager) GetLibraryByID(ctx context.Context, id string) (*Library, error) {
-	url := internal.URL(c, internal.LibraryPath).WithID(id)
+	url := c.Resource(internal.LibraryPath).WithID(id)
 	var res Library
 	return &res, c.Do(ctx, url.Request(http.MethodGet), &res)
 }

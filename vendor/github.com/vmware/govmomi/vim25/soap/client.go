@@ -159,6 +159,10 @@ func NewClient(u *url.URL, insecure bool) *Client {
 	return &c
 }
 
+func (c *Client) DefaultTransport() *http.Transport {
+	return c.t
+}
+
 // NewServiceClient creates a NewClient with the given URL.Path and namespace.
 func (c *Client) NewServiceClient(path string, namespace string) *Client {
 	vc := c.URL()
@@ -173,7 +177,7 @@ func (c *Client) NewServiceClient(path string, namespace string) *Client {
 
 	client := NewClient(u, c.k)
 	client.Namespace = "urn:" + namespace
-	client.Transport.(*http.Transport).TLSClientConfig = c.Transport.(*http.Transport).TLSClientConfig
+	client.DefaultTransport().TLSClientConfig = c.DefaultTransport().TLSClientConfig
 	if cert := c.Certificate(); cert != nil {
 		client.SetCertificate(*cert)
 	}
@@ -532,6 +536,32 @@ func (c *Client) WithHeader(ctx context.Context, header Header) context.Context 
 	return context.WithValue(ctx, headerContext{}, header)
 }
 
+type statusError struct {
+	res *http.Response
+}
+
+// Temporary returns true for HTTP response codes that can be retried
+// See vim25.TemporaryNetworkError
+func (e *statusError) Temporary() bool {
+	switch e.res.StatusCode {
+	case http.StatusBadGateway:
+		return true
+	}
+	return false
+}
+
+func (e *statusError) Error() string {
+	return e.res.Status
+}
+
+func newStatusError(res *http.Response) error {
+	return &url.Error{
+		Op:  res.Request.Method,
+		URL: res.Request.URL.Path,
+		Err: &statusError{res},
+	}
+}
+
 func (c *Client) RoundTrip(ctx context.Context, reqBody, resBody HasFault) error {
 	var err error
 	var b []byte
@@ -587,7 +617,7 @@ func (c *Client) RoundTrip(ctx context.Context, reqBody, resBody HasFault) error
 		case http.StatusInternalServerError:
 			// Error, but typically includes a body explaining the error
 		default:
-			return errors.New(res.Status)
+			return newStatusError(res)
 		}
 
 		dec := xml.NewDecoder(res.Body)
@@ -755,7 +785,7 @@ func (c *Client) Download(ctx context.Context, u *url.URL, param *Download) (io.
 	switch res.StatusCode {
 	case http.StatusOK:
 	default:
-		err = errors.New(res.Status)
+		err = fmt.Errorf("download(%s): %s", u, res.Status)
 	}
 
 	if err != nil {

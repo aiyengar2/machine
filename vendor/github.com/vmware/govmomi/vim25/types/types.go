@@ -8231,7 +8231,7 @@ func init() {
 type ClusterDasAdmissionControlPolicy struct {
 	DynamicData
 
-	ResourceReductionToToleratePercent int32 `xml:"resourceReductionToToleratePercent,omitempty"`
+	ResourceReductionToToleratePercent *int32 `xml:"resourceReductionToToleratePercent"`
 }
 
 func init() {
@@ -11866,6 +11866,11 @@ type DVPortgroupConfigInfo struct {
 	AutoExpand                   *bool                                     `xml:"autoExpand"`
 	VmVnicNetworkResourcePoolKey string                                    `xml:"vmVnicNetworkResourcePoolKey,omitempty"`
 	Uplink                       *bool                                     `xml:"uplink"`
+	LogicalSwitchUuid            string                                    `xml:"logicalSwitchUuid,omitempty"`
+	SegmentId                    string                                    `xml:"segmentId,omitempty"`
+	TransportZoneName            string                                    `xml:"transportZoneName,omitempty"`
+	TransportZoneUuid            string                                    `xml:"transportZoneUuid,omitempty"`
+	BackingType                  string                                    `xml:"backingType,omitempty"`
 }
 
 func init() {
@@ -11887,6 +11892,11 @@ type DVPortgroupConfigSpec struct {
 	VendorSpecificConfig         []DistributedVirtualSwitchKeyedOpaqueBlob `xml:"vendorSpecificConfig,omitempty"`
 	AutoExpand                   *bool                                     `xml:"autoExpand"`
 	VmVnicNetworkResourcePoolKey string                                    `xml:"vmVnicNetworkResourcePoolKey,omitempty"`
+	LogicalSwitchUuid            string                                    `xml:"logicalSwitchUuid,omitempty"`
+	SegmentId                    string                                    `xml:"segmentId,omitempty"`
+	TransportZoneName            string                                    `xml:"transportZoneName,omitempty"`
+	TransportZoneUuid            string                                    `xml:"transportZoneUuid,omitempty"`
+	BackingType                  string                                    `xml:"backingType,omitempty"`
 }
 
 func init() {
@@ -49025,6 +49035,17 @@ func init() {
 
 type VStorageObjectCreateSnapshot_TaskResponse struct {
 	Returnval ManagedObjectReference `xml:"returnval"`
+}
+
+type VStorageObjectSnapshotDetails struct {
+	DynamicData
+
+	Path                   string `xml:"path,omitempty"`
+	ChangedBlockTrackingId string `xml:"changedBlockTrackingId,omitempty"`
+}
+
+func init() {
+	t["VStorageObjectSnapshotDetails"] = reflect.TypeOf((*VStorageObjectSnapshotDetails)(nil)).Elem()
 }
 
 type VStorageObjectSnapshotInfo struct {

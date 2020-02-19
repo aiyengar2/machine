@@ -61,9 +61,9 @@ type AdditionalParams struct {
 
 const (
 	ClassOvfParams             = "com.vmware.vcenter.ovf.ovf_params"
+	ClassPropertyParams        = "com.vmware.vcenter.ovf.property_params"
 	TypeDeploymentOptionParams = "DeploymentOptionParams"
 	TypeExtraConfigParams      = "ExtraConfigParams"
-	TypeExtraConfigs           = "ExtraConfigs"
 	TypeIPAllocationParams     = "IpAllocationParams"
 	TypePropertyParams         = "PropertyParams"
 	TypeSizeParams             = "SizeParams"
@@ -203,6 +203,33 @@ func (e *DeploymentError) Error() string {
 	return "deploy error: " + msg
 }
 
+// LibraryTarget specifies a Library or Library item
+type LibraryTarget struct {
+	LibraryID     string `json:"library_id,omitempty"`
+	LibraryItemID string `json:"library_item_id,omitempty"`
+}
+
+// CreateSpec info used to create an OVF package from a VM
+type CreateSpec struct {
+	Description string   `json:"description,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Flags       []string `json:"flags,omitempty"`
+}
+
+// OVF data used by CreateOVF
+type OVF struct {
+	Spec   CreateSpec    `json:"create_spec"`
+	Source ResourceID    `json:"source"`
+	Target LibraryTarget `json:"target"`
+}
+
+// CreateResult used for decoded a CreateOVF response
+type CreateResult struct {
+	Succeeded bool             `json:"succeeded,omitempty"`
+	ID        string           `json:"ovf_library_item_id,omitempty"`
+	Error     *DeploymentError `json:"error,omitempty"`
+}
+
 // Deployment is the results from issuing a library OVF deployment
 type Deployment struct {
 	Succeeded  bool             `json:"succeeded,omitempty"`
@@ -237,9 +264,26 @@ func NewManager(client *rest.Client) *Manager {
 	}
 }
 
+// CreateOVF creates a library OVF item in content library from an existing VM
+func (c *Manager) CreateOVF(ctx context.Context, ovf OVF) (string, error) {
+	if ovf.Source.Type == "" {
+		ovf.Source.Type = "VirtualMachine"
+	}
+	url := c.Resource(internal.VCenterOVFLibraryItem)
+	var res CreateResult
+	err := c.Do(ctx, url.Request(http.MethodPost, ovf), &res)
+	if err != nil {
+		return "", err
+	}
+	if res.Succeeded {
+		return res.ID, nil
+	}
+	return "", res.Error
+}
+
 // DeployLibraryItem deploys a library OVF
 func (c *Manager) DeployLibraryItem(ctx context.Context, libraryItemID string, deploy Deploy) (*types.ManagedObjectReference, error) {
-	url := internal.URL(c, internal.VCenterOVFLibraryItem).WithID(libraryItemID).WithAction("deploy")
+	url := c.Resource(internal.VCenterOVFLibraryItem).WithID(libraryItemID).WithAction("deploy")
 	var res Deployment
 	err := c.Do(ctx, url.Request(http.MethodPost, deploy), &res)
 	if err != nil {
@@ -254,7 +298,7 @@ func (c *Manager) DeployLibraryItem(ctx context.Context, libraryItemID string, d
 
 // FilterLibraryItem deploys a library OVF
 func (c *Manager) FilterLibraryItem(ctx context.Context, libraryItemID string, filter FilterRequest) (FilterResponse, error) {
-	url := internal.URL(c, internal.VCenterOVFLibraryItem).WithID(libraryItemID).WithAction("filter")
+	url := c.Resource(internal.VCenterOVFLibraryItem).WithID(libraryItemID).WithAction("filter")
 	var res FilterResponse
 	return res, c.Do(ctx, url.Request(http.MethodPost, filter), &res)
 }
