@@ -336,7 +336,7 @@ func (d *Driver) PreCreateCheck() (err error) {
 	}
 
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -383,7 +383,7 @@ func (d *Driver) Create() error {
 	// resource fails, other ones would be kicked off, which could lead to a
 	// resource leak. This is slower but safer.
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func (d *Driver) Remove() error {
 
 	log.Info("NOTICE: Please check Azure portal/CLI to make sure you have no leftover resources to avoid unexpected charges.")
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -539,7 +539,7 @@ func (d *Driver) GetState() (state.State, error) {
 	}
 
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return state.None, err
 	}
@@ -562,7 +562,7 @@ func (d *Driver) Start() error {
 	}
 
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -576,7 +576,7 @@ func (d *Driver) Stop() error {
 	}
 
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -595,7 +595,7 @@ func (d *Driver) Restart() error {
 	// during the restart operation. Hence we rely on returned async operation
 	// polling to make sure the reboot is waited upon.
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -609,7 +609,7 @@ func (d *Driver) Kill() error {
 	}
 
 	ctx := context.Background()
-	c, err := d.newAzureClient()
+	c, err := d.newAzureClient(ctx)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ import (
 // loadOrFindTenantID figures out the AAD tenant ID of the subscription by first
 // looking at the cache file, if not exists, makes a network call to load it and
 // cache it for future use.
-func loadOrFindTenantID(env azure.Environment, subscriptionID string) (string, error) {
+func loadOrFindTenantID(ctx context.Context, env azure.Environment, subscriptionID string) (string, error) {
 	var tenantID string
 
 	log.Debug("Looking up AAD Tenant ID.", logutil.Fields{
@@ -40,7 +40,7 @@ func loadOrFindTenantID(env azure.Environment, subscriptionID string) (string, e
 	// Handle cache miss
 	if tenantID == "" {
 		log.Debug("Making API call to find tenant ID")
-		t, err := findTenantID(env, subscriptionID)
+		t, err := findTenantID(ctx, env, subscriptionID)
 		if err != nil {
 			return "", err
 		}
@@ -61,8 +61,9 @@ func loadOrFindTenantID(env azure.Environment, subscriptionID string) (string, e
 // findTenantID figures out the AAD tenant ID of the subscription by making an
 // unauthenticated request to the Get Subscription Details endpoint and parses
 // the value from WWW-Authenticate header.
-func findTenantID(env azure.Environment, subscriptionID string) (string, error) {
-	goCtx := context.TODO()
+func findTenantID(ctx context.Context, env azure.Environment, subscriptionID string) (string, error) {
+	goCtx, cancel := context.WithTimeout(ctx, findTenantIDTimeout)
+	defer cancel()
 	const hdrKey = "WWW-Authenticate"
 	c := subscriptionsClient(env.ResourceManagerEndpoint)
 
@@ -122,4 +123,10 @@ func saveTenantID(path string, tenantID string) error {
 		return fmt.Errorf("Failed to chmod the file %s: %v", path, err)
 	}
 	return nil
+}
+
+// tenantIDPath returns the full path the tenant ID for the given subscription
+// should be saved at.f
+func tenantIDPath(subscriptionID string) string {
+	return filepath.Join(azureCredsPath(), fmt.Sprintf("%s.tenantid", subscriptionID))
 }

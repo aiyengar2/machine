@@ -5,10 +5,12 @@ go 1.13
 replace github.com/docker/docker => github.com/moby/moby v1.4.2-0.20170731201646-1009e6a40b29
 
 require (
+	cloud.google.com/go v0.53.0 // indirect
 	github.com/Azure/azure-sdk-for-go v39.1.0+incompatible
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Azure/go-autorest/autorest v0.9.5
 	github.com/Azure/go-autorest/autorest/adal v0.8.2
+	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
 	github.com/Azure/go-autorest/autorest/to v0.3.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
 	github.com/aws/aws-sdk-go v1.20.20
@@ -36,18 +38,16 @@ require (
 	github.com/samalba/dockerclient v0.0.0-20151231000007-f661dd4754aa
 	github.com/sirupsen/logrus v1.0.4 // indirect
 	github.com/skarademir/naturalsort v0.0.0-20150715044055-69a5d87bef62
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
 	github.com/tent/http-link-go v0.0.0-20130702225549-ac974c61c2f9 // indirect
 	github.com/urfave/cli v1.11.1-0.20151120215642-0302d3914d2a
 	github.com/vmware/govcloudair v0.0.2
 	github.com/vmware/govmomi v0.21.0
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413
-	golang.org/x/net v0.0.0-20191126235420-ef20fe5d7933
-	golang.org/x/oauth2 v0.0.0-20151117210313-442624c9ec92
-	golang.org/x/sys v0.0.0-20191128015809-6d18c012aee9
-	google.golang.org/api v0.0.0-20180213000552-87a2f5c77b36
-	google.golang.org/appengine v0.0.0-20160205025855-6a436539be38 // indirect
-	google.golang.org/cloud v0.0.0-20151119220103-975617b05ea8 // indirect
+	golang.org/x/net v0.0.0-20200202094626-16171245cfb2
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
+	golang.org/x/sys v0.0.0-20200212091648-12a6c2dcc1e4
+	google.golang.org/api v0.17.0
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
 	gopkg.in/yaml.v2 v2.2.7
