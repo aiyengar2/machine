@@ -530,7 +530,7 @@ func (a AzureClient) CreateVirtualMachine(ctx context.Context, resourceGroup, na
 		"osImage":  imageName,
 	})
 
-	img, err := parseImageName(imageName)
+	imgReference, err := a.getImageReference(imageName)
 	if err != nil {
 		return err
 	}
@@ -578,13 +578,8 @@ func (a AzureClient) CreateVirtualMachine(ctx context.Context, resourceGroup, na
 				},
 				OsProfile: osProfile,
 				StorageProfile: &compute.StorageProfile{
-					ImageReference: &compute.ImageReference{
-						Publisher: to.StringPtr(img.publisher),
-						Offer:     to.StringPtr(img.offer),
-						Sku:       to.StringPtr(img.sku),
-						Version:   to.StringPtr(img.version),
-					},
-					OsDisk: getOSDisk(name, storageAccount, isManaged, storageType, diskSize),
+					ImageReference: imgReference,
+					OsDisk:         getOSDisk(name, storageAccount, isManaged, storageType, diskSize),
 				},
 			},
 		})
@@ -596,6 +591,41 @@ func (a AzureClient) CreateVirtualMachine(ctx context.Context, resourceGroup, na
 	}
 	_, err = future.Result(virtualMachinesClient)
 	return err
+}
+
+// getImageReference parses a publisher:offer:sku:version or parses the string as a custom image reference
+func (a AzureClient) getImageReference(image string) (*compute.ImageReference, error) {
+	if l := strings.Split(image, ":"); !strings.Contains(image, "/") && len(l) == 4 {
+		imageReference := &compute.ImageReference{
+			Publisher: to.StringPtr(l[0]),
+			Offer:     to.StringPtr(l[1]),
+			Sku:       to.StringPtr(l[2]),
+			Version:   to.StringPtr(l[3]),
+		}
+		return imageReference, nil
+	}
+	customImageInfo, err := parseCustomImageReference(image)
+	if err != nil {
+		return nil, err
+	}
+	goCtx := context.TODO()
+	if customImageInfo.isGalleryImage() {
+		_, err := a.galleryImagesClient().Get(goCtx, customImageInfo.resourceGroup, customImageInfo.imageName, "")
+		if err != nil {
+			log.Info("Failed to find gallery image with the following attributes: ", customImageInfo.toLogField())
+			return nil, fmt.Errorf("Custom image does not exist")
+		}
+	} else {
+		_, err := a.imagesClient().Get(goCtx, customImageInfo.resourceGroup, customImageInfo.galleryName, customImageInfo.imageName)
+		if err != nil {
+			log.Info("Failed to find custom image with the following attributes: ", customImageInfo.toLogField())
+			return nil, fmt.Errorf("Custom image does not exist")
+		}
+	}
+	imageReference := &compute.ImageReference{
+		ID: to.StringPtr(customImageInfo.toCustomImageReferenceId()),
+	}
+	return imageReference, nil
 }
 
 // GetOSDisk creates and returns pointer to a disk that is configured for either managed or unmanaged disks depending
