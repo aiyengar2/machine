@@ -6,13 +6,10 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2019-12-01/network"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
-	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/rancher/machine/drivers/azure/azureutil"
 	"github.com/rancher/machine/drivers/azure/logutil"
-	"github.com/rancher/machine/drivers/driverutil"
 	"github.com/rancher/machine/libmachine/log"
 	"github.com/rancher/machine/libmachine/ssh"
 	"github.com/rancher/machine/libmachine/state"
@@ -84,53 +81,6 @@ func (d *Driver) generateSSHKey(deploymentCtx *azureutil.DeploymentContext) erro
 	return err
 }
 
-// getSecurityRules creates network security group rules based on driver
-// configuration such as SSH port, docker port and swarm port.
-func (d *Driver) getSecurityRules(extraPorts []string) (*[]network.SecurityRule, error) {
-	mkRule := func(priority int, name, description, srcPort, dstPort string, proto network.SecurityRuleProtocol) network.SecurityRule {
-		return network.SecurityRule{
-			Name: to.StringPtr(name),
-			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-				Description:              to.StringPtr(description),
-				SourceAddressPrefix:      to.StringPtr("*"),
-				DestinationAddressPrefix: to.StringPtr("*"),
-				SourcePortRange:          to.StringPtr(srcPort),
-				DestinationPortRange:     to.StringPtr(dstPort),
-				Access:                   network.SecurityRuleAccessAllow,
-				Direction:                network.SecurityRuleDirectionInbound,
-				Protocol:                 proto,
-				Priority:                 to.Int32Ptr(int32(priority)),
-			},
-		}
-	}
-
-	log.Debugf("Docker port is configured as %d", d.DockerPort)
-
-	// Base ports to be opened for any machine
-	rl := []network.SecurityRule{
-		mkRule(100, "SSHAllowAny", "Allow ssh from public Internet", "*", fmt.Sprintf("%d", d.BaseDriver.SSHPort), network.SecurityRuleProtocolTCP),
-		mkRule(300, "DockerAllowAny", "Allow docker engine access (TLS-protected)", "*", fmt.Sprintf("%d", d.DockerPort), network.SecurityRuleProtocolTCP),
-	}
-
-	// extra port numbers requested by user
-	basePri := 1000
-	for i, p := range extraPorts {
-		port, protocol := driverutil.SplitPortProto(p)
-		proto, err := parseSecurityRuleProtocol(protocol)
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse security rule protocol: %v", err)
-		}
-		log.Debugf("User-requested port to be opened on NSG: %v/%s", port, proto)
-		name := fmt.Sprintf("Port%s-%sAllowAny", port, proto)
-		name = strings.Replace(name, "*", "Asterisk", -1)
-		r := mkRule(basePri+i, name, "User requested port to be accessible from Internet via docker-machine", "*", port, proto)
-		rl = append(rl, r)
-	}
-	log.Debugf("Total NSG rules: %d", len(rl))
-
-	return &rl, nil
-}
-
 func (d *Driver) naming() azureutil.ResourceNaming {
 	return azureutil.ResourceNaming(d.BaseDriver.MachineName)
 }
@@ -164,6 +114,26 @@ func (d *Driver) ipAddress(ctx context.Context) (ip string, err error) {
 	return ip, nil
 }
 
+// resolveNSGReference extracts d.nsgResourceID and d.nsgUsedInPool from d.NSG
+func (d *Driver) resolveNSGReference() {
+	nsgFormat := "subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/networkSecurityGroups/%s"
+	if strings.Contains(d.NSG, "/") {
+		// ARM resource identifier provided
+		d.nsgResourceID = d.NSG
+		d.nsgUsedInPool = true
+		return
+	}
+	if len(d.NSG) > 0 {
+		// Name provided; NSG will be created / is assumed to exist within the Subscription
+		// and ResourceGroup provided to the Driver
+		d.nsgResourceID = fmt.Sprintf(nsgFormat, d.SubscriptionID, d.ResourceGroup, d.NSG)
+		d.nsgUsedInPool = true
+	}
+	// Legacy case: create one NSG per node according to the naming convention
+	d.nsgResourceID = fmt.Sprintf(nsgFormat, d.SubscriptionID, d.ResourceGroup, d.naming().NSG())
+	d.nsgUsedInPool = false
+}
+
 func machineStateForVMPowerState(ps azureutil.VMPowerState) state.State {
 	m := map[azureutil.VMPowerState]state.State{
 		azureutil.Running:      state.Running,
@@ -190,19 +160,4 @@ func parseVirtualNetwork(name string, defaultRG string) (string, string) {
 		return l[0], l[1]
 	}
 	return defaultRG, name
-}
-
-// parseSecurityRuleProtocol parses a protocol string into a network.SecurityRuleProtocol
-// and returns error if the protocol is not supported
-func parseSecurityRuleProtocol(proto string) (network.SecurityRuleProtocol, error) {
-	switch strings.ToLower(proto) {
-	case "tcp":
-		return network.SecurityRuleProtocolTCP, nil
-	case "udp":
-		return network.SecurityRuleProtocolUDP, nil
-	case "*":
-		return network.SecurityRuleProtocolAsterisk, nil
-	default:
-		return "", fmt.Errorf("invalid protocol %s", proto)
-	}
 }

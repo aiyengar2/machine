@@ -104,33 +104,73 @@ func (a AzureClient) resourceGroupExists(ctx context.Context, name string) (bool
 	return checkResourceExistsFromError(err)
 }
 
-// CreateNetworkSecurityGroup either creates or updates the definition of the requested security group with the specified rules and adds it to our DeploymentContext
-func (a AzureClient) CreateNetworkSecurityGroup(ctx context.Context, deploymentCtx *DeploymentContext, resourceGroup, name, location string, rules *[]network.SecurityRule) error {
-	log.Info("Configuring network security group.", logutil.Fields{
-		"name":     name,
-		"location": location})
-	securityGroupsClient := a.securityGroupsClient()
-	future, err := securityGroupsClient.CreateOrUpdate(ctx, resourceGroup, name,
-		network.SecurityGroup{
+// ConfigureNetworkSecurityGroup creates or gets a NSG, updates the configuration, and adds it to our deploymentCtx
+func (a AzureClient) ConfigureNetworkSecurityGroup(ctx context.Context, deploymentCtx *DeploymentContext, resourceGroup, resourceID, location string,
+	usedInPool bool, sshPort, dockerPort int, extraPorts []string) error {
+	// Parse the resource ID to extract values
+	resource, err := azure.ParseResourceID(resourceID)
+	if err != nil {
+		return fmt.Errorf("unable to parse resource ID of network security group: %s", resourceID)
+	}
+	f := logutil.Fields{
+		"nsg":        resource,
+		"usedInPool": usedInPool,
+	}
+	log.Info("Configuring network security group.", f)
+	nsg, err := a.securityGroupsClient().Get(ctx, resource.ResourceGroup, resource.ResourceName, "")
+	exists, err := checkResourceExistsFromError(err)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		// NOTE(aiyengar2): resources should only be created within the driver's provided resource group; however,
+		// an outside NSG can be referenced
+		if resource.ResourceGroup != resourceGroup {
+			return fmt.Errorf("cannot create a security group outside of provided resource group %s: %s",
+				resourceGroup, f)
+		}
+		log.Info("Creating a new security group", f)
+		nsg = network.SecurityGroup{
 			Location: to.StringPtr(location),
 			SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
-				SecurityRules: rules,
+				SecurityRules: &[]network.SecurityRule{},
 			},
-		})
+			// NOTE(aiyengar2): this tag is added to verify that a pooled NSG is safe to be deleted by Rancher
+			// once it is orphaned. If a pooled NSG was not created by Rancher, it will never be deleted.
+			Tags: RancherMachineTags{
+				ManagedByRancher: true,
+			}.CreateTags(),
+		}
+	}
+	if to.String(nsg.Location) != location {
+		return fmt.Errorf("cannot attach security group in %s to a machine provisioned in %s: %s", to.String(nsg.Location), location, f)
+	}
+	nsg.SecurityGroupPropertiesFormat.SecurityRules, err = ConfigureSecurityRules(
+		nsg.SecurityGroupPropertiesFormat.SecurityRules, sshPort, dockerPort, extraPorts)
+	if err != nil {
+		return err
+	}
+	securityGroupsClient := a.securityGroupsClient()
+	future, err := securityGroupsClient.CreateOrUpdate(ctx, resource.ResourceGroup, resource.ResourceName, nsg)
 	if err != nil {
 		return err
 	}
 	if err = future.WaitForCompletionRef(ctx, securityGroupsClient.Client); err != nil {
 		return err
 	}
-	nsg, err := future.Result(securityGroupsClient)
-	deploymentCtx.NetworkSecurityGroupID = to.String(nsg.ID)
+	_, err = future.Result(securityGroupsClient)
+	deploymentCtx.NetworkSecurityGroupID = resourceID
+	deploymentCtx.FirewallRules = nsg.SecurityGroupPropertiesFormat.SecurityRules
 	return err
 }
 
 // DeleteNetworkSecurityGroupIfExists checks to see if the security group exists and accordingly deletes it
-func (a AzureClient) DeleteNetworkSecurityGroupIfExists(ctx context.Context, resourceGroup, name string) error {
-	return a.cleanupResourceIfExists(ctx, &nsgCleanup{rg: resourceGroup, name: name})
+func (a AzureClient) DeleteNetworkSecurityGroupIfExists(ctx context.Context, resourceGroup, resourceID string, usedInPool bool) error {
+	resource, err := azure.ParseResourceID(resourceID)
+	if err != nil {
+		return fmt.Errorf("unable to parse resource ID of network security group: %s", resourceID)
+	}
+	return a.cleanupResourceIfExists(ctx, &nsgCleanup{rg: resource.ResourceGroup, name: resource.ResourceName, usedInPool: usedInPool})
 }
 
 // CreatePublicIPAddress creates a public IP address and adds it to our DeploymentContext
